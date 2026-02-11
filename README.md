@@ -1,48 +1,43 @@
 # Embudo de conversión
 ## Objetivo: agrupar las conversiones del embudo por país (country) y detectar en que etapa del funnel se pierde más a los usuarios.
 
-WITH first_visits AS (
-  SELECT DISTINCT user_id, country
-  FROM mercadolibre_funnel
-  WHERE event_name = 'first_visit'
-    AND event_date BETWEEN '2025-01-01' AND '2025-08-31'
+### Se creo una CTE por evento con el rango de fechas deseado
+WITH first_visit AS(
+    SELECT DISTINCT user_id
+    FROM mercadolibre_funnel
+    WHERE event_name ='first_visit' AND event_date BETWEEN '2025-01-01' AND '2025-08-31'
 ),
-select_item AS (
-  SELECT DISTINCT user_id, country
-  FROM mercadolibre_funnel
-  WHERE event_name IN ('select_item', 'select_promotion')
-    AND event_date BETWEEN '2025-01-01' AND '2025-08-31'
+select_item AS(
+    SELECT DISTINCT user_id
+    FROM mercadolibre_funnel
+    WHERE event_name IN ('select_item', 'select_promotion') AND event_date BETWEEN '2025-01-01' AND '2025-08-31'
 ),
-add_to_cart AS (
-  SELECT DISTINCT user_id, country
-  FROM mercadolibre_funnel
-  WHERE event_name = 'add_to_cart'
-    AND event_date BETWEEN '2025-01-01' AND '2025-08-31'
+add_to_cart AS(
+    SELECT DISTINCT user_id
+    FROM mercadolibre_funnel
+    WHERE event_name ='add_to_cart' AND event_date BETWEEN '2025-01-01' AND '2025-08-31'
 ),
-begin_checkout AS (
-  SELECT DISTINCT user_id, country
-  FROM mercadolibre_funnel
-  WHERE event_name = 'begin_checkout'
-    AND event_date BETWEEN '2025-01-01' AND '2025-08-31'
+begin_checkout AS(
+    SELECT DISTINCT user_id
+    FROM mercadolibre_funnel
+    WHERE event_name ='begin_checkout' AND event_date BETWEEN '2025-01-01' AND '2025-08-31'
 ),
-add_shipping_info AS (
-  SELECT DISTINCT user_id, country
-  FROM mercadolibre_funnel
-  WHERE event_name = 'add_shipping_info'
-    AND event_date BETWEEN '2025-01-01' AND '2025-08-31'
+add_shipping_info AS(
+    SELECT DISTINCT user_id
+    FROM mercadolibre_funnel
+    WHERE event_name ='add_shipping_info' AND event_date BETWEEN '2025-01-01' AND '2025-08-31'
 ),
-add_payment_info AS (
-  SELECT DISTINCT user_id, country
-  FROM mercadolibre_funnel
-  WHERE event_name = 'add_payment_info'
-    AND event_date BETWEEN '2025-01-01' AND '2025-08-31'
+add_payment_info AS(
+    SELECT DISTINCT user_id
+    FROM mercadolibre_funnel
+    WHERE event_name ='add_payment_info' AND event_date BETWEEN '2025-01-01' AND '2025-08-31'
 ),
-purchase AS (
-  SELECT DISTINCT user_id, country
-  FROM mercadolibre_funnel
-  WHERE event_name = 'purchase'
-    AND event_date BETWEEN '2025-01-01' AND '2025-08-31'
-),
+purchase AS(
+    SELECT DISTINCT user_id
+    FROM mercadolibre_funnel
+    WHERE event_name ='purchase' AND event_date BETWEEN '2025-01-01' AND '2025-08-31'
+)
+### Se unieron las CTEs anclando en signup y cuenta usuarios por etapa y se agruparon mediante la variable country
 funnel_counts AS(
 SELECT
     fv.country,
@@ -63,14 +58,7 @@ LEFT JOIN purchase p            ON fv.user_id = p.user_id   AND fv.country = p.c
 GROUP BY fv.country
 )
 
-### Se muestra country
-### Se calcula conversion_select_item,
-### Se calcula conversion_add_to_cart,
-### Se calcula conversion_begin_checkout,
-### Se calcula conversion_add_shipping_info,
-### Se calcula conversion_add_payment_info,
-### Se calcula conversion_purchase
-
+###  A partir de los conteos por etapa del embudo, se calculo el porcentaje de conversión desde la etapa inicial (first_visit) hacia cada etapa.
 SELECT 
     country,
     usuarios_select_item       * 100.0 / NULLIF(usuarios_first_visit, 0) AS conversion_select_item,
@@ -83,42 +71,3 @@ FROM
     funnel_counts
 ORDER BY 
     conversion_purchase DESC
-
-# Analizar retención de cohortes
-## Objetivo: Ahora, para cada cohorte mensual (YYYY-MM), se calcula el % de usuarios activos al día 7, 14, 21, y 28  desde su registro.
-
-WITH cohort AS (
-SELECT
-    user_id,
-    TO_CHAR(DATE_TRUNC('month', MIN(signup_date)), 'YYYY-MM') AS cohort
-FROM 
-    mercadolibre_retention
-GROUP BY user_id
-),
-
-### CTE activity: se toman columnas claves de mercadolibre_retention y añadir el cohort 
-
-activity AS (
-    SELECT 
-        r.user_id,
-        c.cohort,
-        r.day_after_signup,
-        r.active
-    FROM 
-        mercadolibre_retention r
-    LEFT JOIN 
-        cohort c ON c.user_id = r.user_id
-    WHERE 
-        r.activity_date BETWEEN '2025-01-01' AND '2025-08-31'
-)
-### Conteos exactos por día acumulado X / tamaño de cohorte -> % redondeado
-
-SELECT 
-    cohort,
-    ROUND(COUNT(DISTINCT CASE WHEN day_after_signup >= 7 AND active = 1 THEN user_id END) * 100.0 / NULLIF(COUNT(DISTINCT user_id),0),1) AS D7,
-    ROUND(COUNT(DISTINCT CASE WHEN day_after_signup >= 14 AND active = 1 THEN user_id END) * 100.0 / NULLIF(COUNT(DISTINCT user_id),0),1) AS D14,
-    ROUND(COUNT(DISTINCT CASE WHEN day_after_signup >= 21 AND active = 1 THEN user_id END) * 100.0 / NULLIF(COUNT(DISTINCT user_id),0),1) AS D21,
-    ROUND(COUNT(DISTINCT CASE WHEN day_after_signup >= 28 AND active = 1 THEN user_id END) * 100.0 / NULLIF(COUNT(DISTINCT user_id),0),1) AS D28
-FROM activity
-GROUP BY cohort
-ORDER BY cohort;
